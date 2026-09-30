@@ -485,7 +485,9 @@ def build_track(track, style, option, params):
             marker_instances(end.bolts, Pb[k], Lb[k], Ub[k], Fb[k], bolts)
             marker_instances(end.nuts, Pb[k], Lb[k], Ub[k], Fb[k], nuts)
         if start is None and end is None:
-            generic_flanges(mb, tube_parts(style, option, gauge, rail_r), Pb, Lb, Ub, Fb, bolts)
+            # rails are sleeved inside at the joints; only the spine gets a bolted flange
+            spine = [p for p in tube_parts(style, option, gauge, rail_r) if p[-1] != "Rails"]
+            generic_flanges(mb, spine, Pb, Lb, Ub, Fb, bolts)
         fb = option.get("flange_bolts")
         if fb and params.get("bolts", True) and "bm_flange" in A["bolts"]:
             k = joint
