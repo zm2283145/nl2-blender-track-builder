@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.zip
+# Built from your own NoLimits 2 install: game-owned meshes, never publish
+nl2_track_builder/assets/*.json.gz
+*.pkl
+vfs/
