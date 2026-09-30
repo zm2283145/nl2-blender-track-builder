@@ -334,6 +334,11 @@ def tie(style, option, gauge, rail_r):
     if g2 <= 0 or rail_r <= 0:
         return k.data()  # e.g. monorail: no ties
 
+    if boxes and not tubes and not style.get("extra"):
+        top = max(boxes, key=lambda p: p[4])
+        if top[4] < -rail_r * 1.4 - 0.05:
+            return _box_saddle_tie(k, g2, rail_r, top).data()
+
     r = rail_r
     w = 0.055 if r < 0.075 else 0.07
     h = max(0.045, r * 0.65)
@@ -382,6 +387,45 @@ def tie(style, option, gauge, rail_r):
             for xs, xe in ((x0 - 0.012, x0 + 0.001), (x1 - 0.001, x1 + 0.012)):
                 k.box(xs, xe, y1 - d, y1 + 0.001, -w * 0.4, w * 0.4, "tie")
     return k.data()
+
+
+def _box_saddle_tie(k, g2, r, box, t=0.015):
+    """Tie for box-spine track: one plate that sits on the box, straddles its sides with short legs,
+    rises into the underside of each rail and has a curved top edge dipping between the rails, stiffened by a lip."""
+    _, x0, x1, y0, yt = box
+    xc, hb = (x0 + x1) / 2, (x1 - x0) / 2
+    d = min(0.1, (yt - y0) * 0.3)                  # leg drop along the box sides
+    leg = 0.03
+    ydip = max(yt + 0.07, -r * 1.25)               # lowest point of the curved top edge
+    xin = g2 - r * 1.05                            # inner foot of the rail horn
+    xf = max(hb * 0.55, xin - max(0.12, (xin - hb * 0.55) * 0.8))  # where the curve reaches the dip
+    ts = np.linspace(0.0, 1.0, 8)
+    ease = (1 - np.cos(ts * np.pi)) / 2
+    # curve from the horn (xin, -0.3 r) down to (xf, ydip), right-hand side
+    curve = [(xin + (xf - xin) * s, -r * 0.3 + (ydip + r * 0.3) * e) for s, e in zip(ts, ease)]
+    right = [(hb, yt), (hb, yt - d), (hb + leg, yt - d),
+             (g2 + r * 0.2, -r * 1.2), (g2 + r * 0.6, -r * 0.5), (g2, r * 0.35),
+             (g2 - r * 0.8, r * 0.45)] + curve
+    left = [(-x, y) for x, y in reversed(right)]
+    poly = [(xc + x, y) for x, y in right + left]
+    # right runs bottom->top, left mirrors top->bottom: together a clockwise outline, prism() fixes order
+    k.prism(poly, -t, t, "tie")
+    # lip along the curved top edge (and the flat middle)
+    edge = [(xc + x, y) for x, y in curve] + [(xc - x, y) for x, y in reversed(curve)]
+    lip = 0.01
+    for (ax, ay), (bx, by) in zip(edge, edge[1:]):
+        dx, dy = bx - ax, by - ay
+        ln = np.hypot(dx, dy)
+        if ln < 1e-6:
+            continue
+        nx, ny = -dy / ln, dx / ln
+        if ny < 0:
+            nx, ny = -nx, -ny
+        ext = 0.004 / ln  # overlap neighbouring segments slightly so the lip is continuous
+        a = (ax - dx * ext - nx * lip, ay - dy * ext - ny * lip)
+        b = (bx + dx * ext - nx * lip, by + dy * ext - ny * lip)
+        k.bar(a, b, lip * 2, -t * 3, t * 3, "tie")
+    return k
 
 
 # ------------------------------------------------------------------------------------------- pack

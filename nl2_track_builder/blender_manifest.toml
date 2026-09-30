@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "nl2_track_builder"
-version = "1.2.1"
+version = "1.2.2"
 name = "NL2 Track Builder"
 tagline = "Build NoLimits 2 track styles and supports from exported splines"
 maintainer = "NL2 reverse-engineering project"
