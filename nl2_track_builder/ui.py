@@ -77,6 +77,10 @@ class NL2TB_Props(bpy.types.PropertyGroup):
                           description="Turn bolt instances into real geometry (heavy)")
     footers: BoolProperty(name="Footers", default=True)
     connectors: BoolProperty(name="Track Connectors", default=True)
+    procedural: BoolProperty(name="Procedural Parts Only", default=False,
+                             description="Generate ties, connectors, footers and bolts with the add-on's own "
+                                         "geometry instead of the game asset pack. The whole model is then original "
+                                         "(you may sell prints of it). Always on when no asset pack is installed")
     attach: FloatProperty(name="Support Attach Offset", default=0.0, min=-5, max=5, unit="LENGTH",
                           description="Distance below the rails where connectors meet the spine "
                                       "(0 = style default)")
@@ -119,7 +123,11 @@ def _params(p):
     return dict(gauge=p.gauge or None, rail_r=p.rail_r or None, tie_spacing=p.tie_spacing or None,
                 flange_length=p.flange_length or None, tube_sides=p.tube_sides, ties=p.ties, flanges=p.flanges,
                 bolts=p.bolts, footers=p.footers, connectors=p.connectors, attach=p.attach or None,
-                colour_mode=p.colour_mode, track_index=p.track_index)
+                colour_mode=p.colour_mode, track_index=p.track_index, procedural=use_procedural(p))
+
+
+def use_procedural(p):
+    return p.procedural or not core.pack_available()
 
 
 def load_track(p):
@@ -146,8 +154,7 @@ def build(p, what=("track", "supports")):
         res = core.build_track(track, s, o, params)
         bb.mesh_object("NL2 Track", res["mesh"], col)
         for key, (asset, inst) in res["instances"].items():
-            srckey = asset.name if key == "flange_bolts" else key
-            bb.instancer_object("NL2 Track " + key.replace("_", " ").title(), srckey, asset, inst, root, col,
+            bb.instancer_object("NL2 Track " + key.replace("_", " ").title(), asset.name, asset, inst, root, col,
                                 p.realize)
         msgs.append(res["info"])
     if "supports" in what:
@@ -163,11 +170,16 @@ def build(p, what=("track", "supports")):
         bb.update_materials(p, res["colours"])
         bb.mesh_object("NL2 Supports", res["mesh"], col)
         for key, (asset, inst) in res["instances"].items():
-            bb.instancer_object("NL2 " + key.replace("_", " ").title(), key.replace("support_", ""), asset, inst,
-                                root, col, p.realize)
+            bb.instancer_object("NL2 " + key.replace("_", " ").title(), asset.name, asset, inst, root, col,
+                                p.realize)
         msgs.append(res["info"])
+    msgs.append(PARTS_LABEL[params["procedural"]])
     p.last_info = "; ".join(msgs) + "  [%.1fs, v%s]" % (time.time() - t0, VERSION)
     return p.last_info
+
+
+PARTS_LABEL = {True: "procedural parts only - original model, OK to sell",
+               False: "includes game parts - personal use only"}
 
 
 class NL2TB_OT_build(bpy.types.Operator):
@@ -228,7 +240,7 @@ class NL2TB_PT_main(bpy.types.Panel):
         box.prop(p, "style")
         box.prop(p, "option")
         s, o = _style_and_option(p)
-        if not o["exact"]:
+        if not o["exact"] and not use_procedural(p):
             box.label(text="Approximate style (no game tie model)", icon="INFO")
         if s["key"] == "custom":
             box.prop(p, "custom_spine")
@@ -240,6 +252,13 @@ class NL2TB_PT_main(bpy.types.Panel):
         row = box.row()
         row.prop(p, "inverted")
         row.prop(p, "close", text="")
+        box = lay.box()
+        if core.pack_available():
+            box.prop(p, "procedural")
+        else:
+            box.label(text="No game asset pack: procedural parts", icon="CHECKMARK")
+        proc = use_procedural(p)
+        box.label(text=PARTS_LABEL[proc].capitalize(), icon="CHECKMARK" if proc else "ERROR")
         lay.operator("nl2tb.build", text="Build Track + Supports", icon="MOD_CURVE").what = "ALL"
         row = lay.row(align=True)
         row.operator("nl2tb.build", text="Track").what = "TRACK"

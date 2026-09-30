@@ -2,8 +2,8 @@
 
 Geometry constants were read out of the NoLimits 2 executable. Each style's slot-2 "build tubes"
 function gives the rails, the extra tubes and their radii. The constructors give the spine options
-and tie spacing. Tie, flange and connector models are the game's own LWO/3DS files, bundled in
-assets/.
+and tie spacing. Tie, flange and connector model keys refer to the optional personal asset pack
+(assets/); without it, or with Procedural Parts Only, procedural.py generates original parts instead.
 
 Local track frame used everywhere: x = LEFT, y = UP, z = FORWARD (metres).
 Parts:

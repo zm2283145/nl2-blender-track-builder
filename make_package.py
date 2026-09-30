@@ -1,6 +1,8 @@
 """Bump the add-on version, rebuild nl2_track_builder.zip and install it into Blender's user extensions.
 
-Usage: python make_package.py [--no-bump] [--no-install] [--public]
+Usage: python make_package.py [--no-bump | --minor] [--no-install] [--public]
+
+--minor bumps 1.2.3 -> 1.3.0 instead of 1.2.4.
 
 --public leaves the game asset pack (assets/nl2_assets.json.gz) out of the zip; use it for anything you
 share. The asset pack is built from your own NoLimits 2 install and must stay on your machine.
@@ -27,11 +29,13 @@ def rewrite(path, pattern, repl):
         fh.write(new)
 
 
-def bump():
+def bump(minor_release=False):
     vpath = os.path.join(PKG, "version.py")
     with open(vpath, encoding="utf-8") as fh:
         cur = re.search(r'VERSION = "(\d+)\.(\d+)\.(\d+)"', fh.read())
     major, minor, patch = (int(x) for x in cur.groups())
+    if minor_release:
+        minor, patch = minor + 1, -1
     ver = "%d.%d.%d" % (major, minor, patch + 1)
     rewrite(vpath, r'^VERSION = "[^"]*"', 'VERSION = "%s"' % ver)
     rewrite(os.path.join(PKG, "blender_manifest.toml"), r'^version = "[^"]*"', 'version = "%s"' % ver)
@@ -80,7 +84,7 @@ if __name__ == "__main__":
         with open(os.path.join(PKG, "version.py"), encoding="utf-8") as fh:
             ver = re.search(r'VERSION = "(.*)"', fh.read()).group(1)
     else:
-        ver = bump()
+        ver = bump("--minor" in sys.argv)
     package("--public" in sys.argv)
     print("version", ver, "->", ZIP)
     if "--no-install" not in sys.argv:

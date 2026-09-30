@@ -45,17 +45,41 @@ class Asset:
         return a
 
 
+PACK = os.path.join(HERE, "assets", "nl2_assets.json.gz")
+_PROC = {}
+
+
+def pack_available():
+    return os.path.isfile(PACK)
+
+
 def assets():
+    """The game asset pack (personal use only), built from the user's own NoLimits 2 install."""
     global _ASSETS
     if _ASSETS is None:
-        path = os.path.join(HERE, "assets", "nl2_assets.json.gz")
-        if not os.path.isfile(path):
-            raise RuntimeError("NL2 asset pack not found (%s). Build it from your own NoLimits 2 install with "
-                               "build_assets.py - see the README." % path)
-        with gzip.open(path, "rt", encoding="utf-8") as fh:
+        if not os.path.isfile(PACK):
+            raise RuntimeError("NL2 asset pack not found (%s). Turn on 'Procedural Parts' or build the pack from "
+                               "your own NoLimits 2 install with build_assets.py - see the README." % PACK)
+        with gzip.open(PACK, "rt", encoding="utf-8") as fh:
             raw = json.load(fh)
         _ASSETS = {g: {k: Asset(k, v) for k, v in grp.items()} for g, grp in raw.items()}
     return _ASSETS
+
+
+def get_assets(style, option, params):
+    """Game asset pack, or (params['procedural']) original generated parts for this style / option."""
+    if not params.get("procedural"):
+        return assets()
+    from . import procedural
+    gauge = params.get("gauge") or style["gauge"]
+    rail_r = params.get("rail_r") or style["rail_r"]
+    attach = params.get("attach") or option.get("attach") or -0.7
+    key = (style["key"], repr(option["parts"]), gauge, rail_r, attach)
+    if key not in _PROC:
+        raw = procedural.pack(style, option, gauge, rail_r, attach)
+        _PROC.clear()
+        _PROC[key] = {g: {k: Asset("proc_" + k, v) for k, v in grp.items()} for g, grp in raw.items()}
+    return _PROC[key]
 
 
 # ------------------------------------------------------------------------------------ mesh builder
@@ -326,53 +350,9 @@ def marker_instances(asset_markers, P, L, U, F, inst, ref_size=0.054, xform=None
 
 # ------------------------------------------------------------------------------ track building
 def generated_tie(style, option, gauge, rail_r):
-    """A simple tie for styles without a game tie model: cross bar plus braces to the spine."""
-    V, idx, counts = [], [], []
-
-    def bar(a, b, w, h):
-        a, b = np.asarray(a, float), np.asarray(b, float)
-        d = b - a
-        ln = np.linalg.norm(d)
-        if ln < 1e-6:
-            return
-        d /= ln
-        n = np.array([-d[1], d[0]])
-        c = [a - n * h / 2, b - n * h / 2, b + n * h / 2, a + n * h / 2]
-        base = len(V)
-        for z in (-w / 2, w / 2):
-            for p in c:
-                V.append((p[0], p[1], z))
-        faces = [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)]
-        for f in faces:
-            idx.extend(base + i for i in f)
-            counts.append(4)
-
-    g2 = gauge / 2.0
-    r = max(rail_r, 0.03)
-    w = 0.05
-    h = max(0.04, r * 0.7)
-    ybar = -r * 0.9
-    bar((-g2, ybar), (g2, ybar), w, h)
-    for part in option["parts"]:
-        if part[0] == "tube":
-            _, x, y, tr = part
-            top = y + tr * 0.7 if y < 0 else y - tr * 0.7
-            bar((-g2, ybar), (x, top), w, h)
-            bar((g2, ybar), (x, top), w, h)
-        elif part[0] == "box":
-            _, x0, x1, y0, y1 = part
-            bar((-g2, ybar), (x0 + 0.02, y1), w, h)
-            bar((g2, ybar), (x1 - 0.02, y1), w, h)
-    a = Asset.__new__(Asset)
-    a.name = "generated_tie"
-    a.V = np.array(V, dtype=float).reshape(-1, 3)
-    a.idx = np.array(idx, dtype=np.int64)
-    a.counts = np.array(counts, dtype=np.int64)
-    a.slot = np.zeros(len(counts), dtype=np.int64)
-    a.slots = ["tie"]
-    a.bolts = np.zeros((0, 7))
-    a.nuts = np.zeros((0, 7))
-    return a
+    """Original tie for styles without a game tie model (and for procedural builds)."""
+    from . import procedural
+    return Asset("proc_tie", procedural.tie(style, option, gauge, rail_r))
 
 
 def tube_parts(style, option, gauge, rail_r):
@@ -398,7 +378,7 @@ def flange_positions(length, target, closed):
 
 def build_track(track, style, option, params):
     """Returns dict(mesh=MeshBuilder, instances={name: (asset, Instances)}, info=str)."""
-    A = assets()
+    A = get_assets(style, option, params)
     gauge = params.get("gauge") or style["gauge"]
     rail_r = params.get("rail_r") or style["rail_r"]
     sides = int(params.get("tube_sides", 12))
@@ -949,7 +929,7 @@ def _pick_size(size):
 
 
 def build_supports(track, sup, style, option, params):
-    A = assets()
+    A = get_assets(style, option, params)
     mb = MeshBuilder()
     bolts, nuts, flanges = Instances(), Instances(), Instances()
     sides = int(params.get("beam_sides", 20))
